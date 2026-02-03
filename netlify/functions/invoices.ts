@@ -1,7 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
 import type { Context } from '@netlify/functions';
 import { z } from 'zod';
-import Stripe from 'stripe';
 
 interface HandlerEvent {
   httpMethod: string;
@@ -14,10 +13,6 @@ const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 );
-
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
-  apiVersion: '2026-01-28.clover',
-});
 
 const headers = {
   'Access-Control-Allow-Origin': '*',
@@ -161,28 +156,15 @@ export const handler = async (event: HandlerEvent, context: Context) => {
 
       if (invoiceError) throw invoiceError;
 
-      // Create Stripe PaymentIntent
-      const paymentIntent = await stripe.paymentIntents.create({
-        amount: Math.round(amount * 100), // Convert to cents
-        currency: 'usd',
-        payment_method: payment_method_id,
-        confirm: true,
-        description: `Payment for Invoice ${invoice.invoice_number}`,
-        metadata: {
-          invoice_id,
-          invoice_number: invoice.invoice_number,
-        },
-      });
-
-      // Record payment in database
+      // Record payment in database (Stripe integration removed)
       const { data: payment, error: paymentError } = await supabase
         .from('payments')
         .insert({
           invoice_id,
           amount,
           payment_date: new Date().toISOString().split('T')[0],
-          payment_method: 'stripe',
-          transaction_id: paymentIntent.id,
+          payment_method: payment_method_id || 'manual',
+          transaction_id: `TXN-${Date.now()}`, // Generate simple transaction ID
           created_by,
         })
         .select()
@@ -210,7 +192,6 @@ export const handler = async (event: HandlerEvent, context: Context) => {
         headers,
         body: JSON.stringify({ 
           data: payment,
-          payment_intent: paymentIntent.id,
         }),
       };
     }
