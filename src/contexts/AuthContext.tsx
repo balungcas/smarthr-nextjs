@@ -1,0 +1,153 @@
+'use client';
+
+import { createClient } from '@/lib/supabase/client';
+import { useRouter } from 'next/navigation';
+import { createContext, useContext, useEffect, useState } from 'react';
+import type { User } from '@supabase/supabase-js';
+
+type UserRole = 'admin' | 'employee' | 'manager';
+
+interface AuthUser extends User {
+  role?: UserRole;
+  first_name?: string;
+  last_name?: string;
+}
+
+interface AuthContextType {
+  user: AuthUser | null;
+  loading: boolean;
+  signIn: (email: string, password: string) => Promise<{ error: Error | null }>;
+  signUp: (email: string, password: string, userData: any) => Promise<{ error: Error | null }>;
+  signOut: () => Promise<void>;
+  resetPassword: (email: string) => Promise<{ error: Error | null }>;
+}
+
+const AuthContext = createContext<AuthContextType | undefined>(undefined);
+
+export function AuthProvider({ children }: { children: React.ReactNode }) {
+  const [user, setUser] = useState<AuthUser | null>(null);
+  const [loading, setLoading] = useState(true);
+  const router = useRouter();
+  const supabase = createClient();
+
+  useEffect(() => {
+    const initializeAuth = async () => {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+
+      if (session?.user) {
+        // Fetch user profile data
+        const { data: userData } = await supabase
+          .from('users')
+          .select('role, first_name, last_name')
+          .eq('id', session.user.id)
+          .single();
+
+        setUser({ ...session.user, ...userData });
+      }
+
+      setLoading(false);
+    };
+
+    initializeAuth();
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange(async (_event, session) => {
+      if (session?.user) {
+        const { data: userData } = await supabase
+          .from('users')
+          .select('role, first_name, last_name')
+          .eq('id', session.user.id)
+          .single();
+
+        setUser({ ...session.user, ...userData });
+      } else {
+        setUser(null);
+      }
+      setLoading(false);
+    });
+
+    return () => subscription.unsubscribe();
+  }, [supabase, router]);
+
+  const signIn = async (email: string, password: string) => {
+    try {
+      const { error } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      });
+      if (error) throw error;
+      return { error: null };
+    } catch (error: any) {
+      return { error };
+    }
+  };
+
+  const signUp = async (email: string, password: string, userData: any) => {
+    try {
+      const { data, error } = await supabase.auth.signUp({
+        email,
+        password,
+      });
+
+      if (error) throw error;
+
+      if (data.user) {
+        // Insert user profile
+        const { error: profileError } = await supabase.from('users').insert({
+          id: data.user.id,
+          email,
+          role: userData.role || 'employee',
+          first_name: userData.first_name,
+          last_name: userData.last_name,
+          phone: userData.phone,
+          address: userData.address,
+        });
+
+        if (profileError) throw profileError;
+      }
+
+      return { error: null };
+    } catch (error: any) {
+      return { error };
+    }
+  };
+
+  const signOut = async () => {
+    await supabase.auth.signOut();
+    router.push('/login');
+  };
+
+  const resetPassword = async (email: string) => {
+    try {
+      const { error } = await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: `${window.location.origin}/reset-password`,
+      });
+      if (error) throw error;
+      return { error: null };
+    } catch (error: any) {
+      return { error };
+    }
+  };
+
+  const value = {
+    user,
+    loading,
+    signIn,
+    signUp,
+    signOut,
+    resetPassword,
+  };
+
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
+}
+
+export function useAuth() {
+  const context = useContext(AuthContext);
+  if (context === undefined) {
+    throw new Error('useAuth must be used within an AuthProvider');
+  }
+  return context;
+}
