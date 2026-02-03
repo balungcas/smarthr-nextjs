@@ -24,6 +24,7 @@ export default function LoginPage() {
       setError(error.message);
       setLoading(false);
     } else {
+      // Use router.push for soft navigation
       router.push('/dashboard');
     }
   };

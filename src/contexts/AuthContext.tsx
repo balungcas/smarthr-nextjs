@@ -28,26 +28,39 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [loading, setLoading] = useState(true);
   const router = useRouter();
-  const supabase = createClient();
 
   useEffect(() => {
+    // Create client inside useEffect to ensure we're in browser context
+    const supabase = createClient();
+    
     const initializeAuth = async () => {
-      const {
-        data: { session },
-      } = await supabase.auth.getSession();
+      try {
+        const {
+          data: { session },
+          error: sessionError
+        } = await supabase.auth.getSession();
+        
+        if (sessionError) throw sessionError;
 
-      if (session?.user) {
-        // Fetch user profile data
-        const { data: userData } = await supabase
-          .from('users')
-          .select('role, first_name, last_name')
-          .eq('id', session.user.id)
-          .single();
+        if (session?.user) {
+          const { data: userData, error: profileError } = await supabase
+            .from('users')
+            .select('role, first_name, last_name')
+            .eq('id', session.user.id)
+            .single();
 
-        setUser({ ...session.user, ...userData });
+          if (profileError) {
+            console.error('Profile fetch error:', profileError);
+            setUser({ ...session.user, role: 'employee' } as AuthUser);
+          } else {
+            setUser({ ...session.user, ...userData });
+          }
+        }
+      } catch (error) {
+        console.error('Auth initialization error:', error);
+      } finally {
+        setLoading(false);
       }
-
-      setLoading(false);
     };
 
     initializeAuth();
@@ -56,13 +69,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       data: { subscription },
     } = supabase.auth.onAuthStateChange(async (_event, session) => {
       if (session?.user) {
-        const { data: userData } = await supabase
+        const { data: userData, error: profileError } = await supabase
           .from('users')
           .select('role, first_name, last_name')
           .eq('id', session.user.id)
           .single();
 
-        setUser({ ...session.user, ...userData });
+        if (profileError) {
+          console.error('Profile fetch error:', profileError);
+          // Set user without profile data
+          setUser(session.user as AuthUser);
+        } else {
+          setUser({ ...session.user, ...userData });
+        }
       } else {
         setUser(null);
       }
@@ -70,9 +89,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     });
 
     return () => subscription.unsubscribe();
-  }, [supabase, router]);
+  }, [router]);
 
   const signIn = async (email: string, password: string) => {
+    const supabase = createClient();
     try {
       const { error } = await supabase.auth.signInWithPassword({
         email,
@@ -86,6 +106,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const signUp = async (email: string, password: string, userData: any) => {
+    const supabase = createClient();
     try {
       const { data, error } = await supabase.auth.signUp({
         email,
@@ -116,11 +137,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const signOut = async () => {
+    const supabase = createClient();
     await supabase.auth.signOut();
     router.push('/login');
   };
 
   const resetPassword = async (email: string) => {
+    const supabase = createClient();
     try {
       const { error } = await supabase.auth.resetPasswordForEmail(email, {
         redirectTo: `${window.location.origin}/reset-password`,
