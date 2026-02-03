@@ -3,6 +3,7 @@
 import { useQuery } from '@tanstack/react-query';
 import ProtectedRoute from '@/components/auth/ProtectedRoute';
 import { User, Mail, Phone, Calendar, Building } from 'lucide-react';
+import { createClient } from '@/lib/supabase/client';
 
 interface Employee {
   id: string;
@@ -19,11 +20,33 @@ interface Employee {
 }
 
 async function fetchEmployees(): Promise<Employee[]> {
-  const response = await fetch('/.netlify/functions/employees');
-  if (!response.ok) {
+  const supabase = createClient();
+  const { data, error } = await supabase
+    .from('employees')
+    .select(`
+      id,
+      employee_id,
+      first_name,
+      last_name,
+      email,
+      phone,
+      employment_type,
+      status,
+      joining_date,
+      department:departments(name),
+      designation:designations(name)
+    `)
+    .order('created_at', { ascending: false });
+
+  if (error) {
     throw new Error('Failed to fetch employees');
   }
-  return response.json();
+
+  return (data || []).map((emp: any) => ({
+    ...emp,
+    department_name: emp.department?.name || null,
+    designation_name: emp.designation?.name || null,
+  }));
 }
 
 export default function EmployeesPage() {

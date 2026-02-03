@@ -3,6 +3,7 @@
 import { useQuery } from '@tanstack/react-query';
 import ProtectedRoute from '@/components/auth/ProtectedRoute';
 import { Building } from 'lucide-react';
+import { createClient } from '@/lib/supabase/client';
 
 interface Department {
   id: string;
@@ -12,11 +13,20 @@ interface Department {
 }
 
 async function fetchDepartments(): Promise<Department[]> {
-  const response = await fetch('/.netlify/functions/departments');
-  if (!response.ok) {
+  const supabase = createClient();
+  const { data, error } = await supabase
+    .from('departments')
+    .select('*, designations(count)')
+    .order('name', { ascending: true });
+
+  if (error) {
     throw new Error('Failed to fetch departments');
   }
-  return response.json();
+
+  return (data || []).map((dept: any) => ({
+    ...dept,
+    designation_count: dept.designations?.[0]?.count || 0,
+  }));
 }
 
 export default function DepartmentsPage() {

@@ -3,6 +3,7 @@
 import { useQuery } from '@tanstack/react-query';
 import ProtectedRoute from '@/components/auth/ProtectedRoute';
 import { Users, Mail, Phone, MapPin } from 'lucide-react';
+import { createClient } from '@/lib/supabase/client';
 
 interface Client {
   id: string;
@@ -17,12 +18,17 @@ interface Client {
 }
 
 async function fetchClients(): Promise<Client[]> {
-  const response = await fetch('/api/clients'); // Note: This endpoint needs to be created
-  if (!response.ok) {
-    // Return mock data for now since endpoint doesn't exist yet
-    return [];
+  const supabase = createClient();
+  const { data, error } = await supabase
+    .from('clients')
+    .select('*')
+    .order('company_name', { ascending: true });
+
+  if (error) {
+    throw new Error('Failed to fetch clients');
   }
-  return response.json();
+
+  return data || [];
 }
 
 export default function ClientsPage() {

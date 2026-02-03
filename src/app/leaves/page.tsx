@@ -3,6 +3,7 @@
 import { useQuery } from '@tanstack/react-query';
 import ProtectedRoute from '@/components/auth/ProtectedRoute';
 import { Calendar, Clock, User } from 'lucide-react';
+import { createClient } from '@/lib/supabase/client';
 
 interface Leave {
   id: string;
@@ -17,11 +18,32 @@ interface Leave {
 }
 
 async function fetchLeaves(): Promise<Leave[]> {
-  const response = await fetch('/.netlify/functions/leaves');
-  if (!response.ok) {
+  const supabase = createClient();
+  const { data, error } = await supabase
+    .from('leaves')
+    .select(`
+      id,
+      leave_type,
+      start_date,
+      end_date,
+      days,
+      reason,
+      status,
+      created_at,
+      employee:employees(first_name, last_name)
+    `)
+    .order('created_at', { ascending: false });
+
+  if (error) {
     throw new Error('Failed to fetch leaves');
   }
-  return response.json();
+
+  return (data || []).map((leave: any) => ({
+    ...leave,
+    employee_name: leave.employee 
+      ? `${leave.employee.first_name} ${leave.employee.last_name}`
+      : 'Unknown',
+  }));
 }
 
 export default function LeavesPage() {

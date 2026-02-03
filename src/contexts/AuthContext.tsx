@@ -29,25 +29,35 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true);
   const router = useRouter();
 
+  console.log('AuthProvider rendering, user:', user, 'loading:', loading);
+
   useEffect(() => {
     // Create client inside useEffect to ensure we're in browser context
+    console.log('useEffect starting...');
     const supabase = createClient();
+    console.log('Supabase client created');
     
     const initializeAuth = async () => {
       try {
+        console.log('Fetching session...');
         const {
           data: { session },
           error: sessionError
         } = await supabase.auth.getSession();
         
+        console.log('Session result:', session, 'Error:', sessionError);
+        
         if (sessionError) throw sessionError;
 
         if (session?.user) {
+          console.log('User found, fetching profile...');
           const { data: userData, error: profileError } = await supabase
             .from('users')
             .select('role, first_name, last_name')
             .eq('id', session.user.id)
             .single();
+
+          console.log('Profile data:', userData, 'Error:', profileError);
 
           if (profileError) {
             console.error('Profile fetch error:', profileError);
@@ -59,6 +69,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       } catch (error) {
         console.error('Auth initialization error:', error);
       } finally {
+        console.log('Setting loading to false');
         setLoading(false);
       }
     };
